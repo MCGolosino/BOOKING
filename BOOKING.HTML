@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>AMD Conference Room Booking</title>
+  <style>
+    body { font-family: Arial; background: #f8f8f8; padding: 30px; }
+    .container { max-width: 700px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
+    label, input, textarea { display: block; width: 100%; margin: 10px 0; }
+    input, textarea { padding: 8px; border-radius: 5px; border: 1px solid #ccc; }
+    button { padding: 10px; background: red; color: white; border: none; width: 100%; border-radius: 5px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+    th, td { padding: 10px; border: 1px solid #ccc; }
+    th { background: #eee; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>📅 Book the AMD Conference Room</h2>
+    <label>Name</label><input type="text" id="name">
+    <label>Email</label><input type="email" id="email">
+    <label>Date</label><input type="date" id="date">
+    <label>Start Time</label><input type="time" id="startTime">
+    <label>End Time</label><input type="time" id="endTime">
+    <label>Purpose</label><textarea id="purpose"></textarea>
+    <button onclick="submitBooking()">📌 Book Now</button>
+    <p id="status"></p>
+
+    <h3>🕒 Today's Bookings</h3>
+    <table>
+      <thead>
+        <tr><th>Time</th><th>Title</th><th>Details</th><th>Action</th></tr>
+      </thead>
+      <tbody id="eventsBody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwrXkZrXQ9G-qwHFSawkLaxkisYlaS3LgZyofBrq8P7hqdrj7mY4SlqB857ldRq4eZpcQ/exec';
+
+    function toAMPM(timeStr) {
+      const [h, m] = timeStr.split(":").map(Number);
+      const suffix = h >= 12 ? "PM" : "AM";
+      const hour12 = ((h + 11) % 12 + 1);
+      return `${hour12}:${m.toString().padStart(2, "0")} ${suffix}`;
+    }
+
+    function submitBooking() {
+      const name = document.getElementById("name").value;
+      const email = document.getElementById("email").value;
+      const date = document.getElementById("date").value;
+      const startTime = document.getElementById("startTime").value;
+      const endTime = document.getElementById("endTime").value;
+      const purpose = document.getElementById("purpose").value;
+      const status = document.getElementById("status");
+
+      if (!name || !email || !date || !startTime || !endTime || !purpose) {
+        status.innerText = "❌ Please complete all fields.";
+        status.style.color = "red";
+        return;
+      }
+
+      status.innerText = "⏳ Processing...";
+
+      fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "submitBooking",
+          name, email, date, startTime, endTime, purpose
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "booked") {
+          status.innerText = "✅ Booking confirmed!";
+          status.style.color = "green";
+          clearForm();
+          fetchEvents();
+        } else if (data.status === "conflict") {
+          status.innerText = "❌ Time slot already booked!";
+          status.style.color = "orange";
+        } else {
+          status.innerText = "❌ Booking failed.";
+          status.style.color = "red";
+        }
+      });
+    }
+
+    function clearForm() {
+      ["name", "email", "date", "startTime", "endTime", "purpose"].forEach(id => {
+        document.getElementById(id).value = "";
+      });
+    }
+
+    function fetchEvents() {
+      fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "getEvents" })
+      })
+      .then(res => res.json())
+      .then(data => {
+        const tbody = document.getElementById("eventsBody");
+        tbody.innerHTML = "";
+        data.events.forEach(ev => {
+          const start = new Date(ev.start);
+          const end = new Date(ev.end);
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${formatTime(start)} - ${formatTime(end)}</td>
+            <td>${ev.title}</td>
+            <td>${ev.description.replace(/\n/g, "<br>")}</td>
+            <td><button onclick="cancelBooking('${ev.id}')">Cancel</button></td>
+          `;
+          tbody.appendChild(row);
+        });
+      });
+    }
+
+    function cancelBooking(eventId) {
+      const cancelledBy = prompt("Enter your name to cancel:");
+      if (!cancelledBy) return;
+      if (!confirm("Are you sure you want to cancel this booking?")) return;
+
+      fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancelBooking", eventId, cancelledBy })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "cancelled") {
+          alert("✅ Booking cancelled.");
+          fetchEvents();
+        } else {
+          alert("❌ Cancellation failed.");
+        }
+      });
+    }
+
+    function formatTime(date) {
+      const h = date.getHours();
+      const m = date.getMinutes().toString().padStart(2, "0");
+      const suffix = h >= 12 ? "PM" : "AM";
+      const hour12 = ((h + 11) % 12 + 1);
+      return `${hour12}:${m} ${suffix}`;
+    }
+
+    window.onload = fetchEvents;
+  </script>
+</body>
+</html>
